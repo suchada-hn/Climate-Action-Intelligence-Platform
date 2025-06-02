@@ -65,7 +65,17 @@ cd Climate-Action-Intelligence-Platform
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment Variables
+### 3. Setup Data Directories
+```bash
+python setup_data_dirs.py
+```
+
+### 4. Test Installation (Optional)
+```bash
+python test_installation.py
+```
+
+### 5. Configure Environment Variables
 Create a `.env` file in the root directory with your API keys:
 
 ```env
@@ -92,7 +102,7 @@ WORLD_BANK_API_BASE=https://api.worldbank.org/v2
 DEFAULT_OUTPUT_FORMAT=json
 ```
 
-### 4. Run the Application
+### 6. Run the Application
 ```bash
 python run_app.py
 ```

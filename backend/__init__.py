@@ -1,1 +1,0 @@
-# Backend module for Climate Action Intelligence Platform

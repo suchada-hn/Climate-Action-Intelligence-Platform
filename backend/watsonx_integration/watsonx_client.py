@@ -4,7 +4,7 @@ IBM watsonx.ai integration for Climate Action Intelligence Platform
 import os
 import logging
 from typing import Dict, List, Optional, Any
-from ibm_watsonx_ai.foundation_models import Model
+from ibm_watsonx_ai.foundation_models import ModelInference
 from ibm_watsonx_ai.metanames import GenTextParamsMetaNames as GenParams
 from config import settings
 
@@ -14,9 +14,12 @@ class WatsonXClient:
     """Enhanced Client for IBM watsonx.ai foundation models with advanced climate intelligence"""
     
     def __init__(self):
+        # Try both API keys for better compatibility
+        api_key = settings.IBM_CLOUD_API_KEY or settings.WATSONX_API_KEY
+        
         self.credentials = {
             "url": settings.IBM_CLOUD_URL,
-            "apikey": settings.IBM_CLOUD_API_KEY
+            "apikey": api_key
         }
         self.project_id = settings.WATSONX_PROJECT_ID
         self.model = None
@@ -25,28 +28,33 @@ class WatsonXClient:
         self._initialize_model()
     
     def _initialize_model(self):
-        """Initialize the watsonx.ai model"""
+        """Initialize the watsonx.ai model with IBM Granite"""
         try:
+            # Optimized parameters for IBM Granite models
             parameters = {
-                GenParams.DECODING_METHOD: "greedy",
-                GenParams.MAX_NEW_TOKENS: 800,
-                GenParams.MIN_NEW_TOKENS: 1,
-                GenParams.TEMPERATURE: 0.1,
-                GenParams.TOP_K: 50,
-                GenParams.TOP_P: 1
+                GenParams.DECODING_METHOD: "sample",  # Better for creative responses
+                GenParams.MAX_NEW_TOKENS: 1000,      # Increased for detailed climate advice
+                GenParams.MIN_NEW_TOKENS: 10,
+                GenParams.TEMPERATURE: 0.3,          # Balanced creativity and accuracy
+                GenParams.TOP_K: 40,                 # Optimized for Granite
+                GenParams.TOP_P: 0.9,                # Better diversity
+                GenParams.REPETITION_PENALTY: 1.1   # Reduce repetition
             }
             
-            self.model = Model(
+            # Use the primary API key (IBM_CLOUD_API_KEY is the main one)
+            self.model = ModelInference(
                 model_id=settings.WATSONX_MODEL_ID,
                 params=parameters,
                 credentials=self.credentials,
                 project_id=self.project_id
             )
-            logger.info("WatsonX model initialized successfully")
+            logger.info(f"IBM Granite model ({settings.WATSONX_MODEL_ID}) initialized successfully")
             self.use_fallback = False
             
         except Exception as e:
-            logger.warning(f"WatsonX model unavailable, using fallback mode: {e}")
+            logger.warning(f"IBM Granite model unavailable, using fallback mode: {e}")
+            logger.warning(f"Credentials check - API Key: {'***' + settings.IBM_CLOUD_API_KEY[-4:] if settings.IBM_CLOUD_API_KEY else 'MISSING'}")
+            logger.warning(f"Project ID: {settings.WATSONX_PROJECT_ID[:8] + '***' if settings.WATSONX_PROJECT_ID else 'MISSING'}")
             self.model = None
             self.use_fallback = True
     

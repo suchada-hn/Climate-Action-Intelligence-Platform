@@ -169,31 +169,195 @@ class ClimateAPIHandler:
         else:
             raise ValueError(f"Unsupported activity type: {activity_type}")
     
-    def get_climate_trace_data(self, country: str = None, sector: str = None) -> Dict[str, Any]:
-        """Get emissions data from Climate TRACE"""
+    def get_climate_trace_data(self, country: str = None, sector: str = None, year: int = 2022) -> Dict[str, Any]:
+        """Get emissions data from Climate TRACE using correct API endpoints"""
         try:
-            # Note: Climate TRACE API might require different authentication
-            # This is a simplified implementation
-            url = f"{settings.CLIMATETRACE_API_BASE}/emissions"
-            params = {}
+            # Use the correct Climate TRACE v6 API endpoints
+            if country and sector:
+                # Get country emissions for specific sector
+                url = f"{settings.CLIMATETRACE_API_BASE}/country/emissions"
+                params = {
+                    'countries': country.upper(),  # Country codes should be uppercase
+                    'sector': sector,
+                    'since': year,
+                    'to': year
+                }
+            elif country:
+                # Get all emissions for a country
+                url = f"{settings.CLIMATETRACE_API_BASE}/country/emissions"
+                params = {
+                    'countries': country.upper(),
+                    'since': year,
+                    'to': year
+                }
+            else:
+                # Get asset emissions (sources)
+                url = f"{settings.CLIMATETRACE_API_BASE}/assets/emissions"
+                params = {
+                    'years': str(year),
+                    'gas': 'co2e_100yr'  # CO2 equivalent with 100-year warming potential
+                }
+                if sector:
+                    params['sectors'] = sector
             
-            if country:
-                params['country'] = country
-            if sector:
-                params['sector'] = sector
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
             
-            # For now, return mock data since Climate TRACE API access might be limited
+            data = response.json()
+            
+            # Process the response based on endpoint
+            if 'assets/emissions' in url:
+                # Asset emissions response
+                total_emissions = sum(item.get('Emissions', 0) for item in data if isinstance(item, dict))
+                asset_count = sum(item.get('AssetCount', 0) for item in data if isinstance(item, dict))
+                
+                return {
+                    'endpoint': 'assets/emissions',
+                    'total_emissions_mt': total_emissions,
+                    'asset_count': asset_count,
+                    'year': year,
+                    'sector': sector or 'all',
+                    'gas': 'co2e_100yr',
+                    'data': data[:10] if isinstance(data, list) else data  # Limit response size
+                }
+            else:
+                # Country emissions response
+                return {
+                    'endpoint': 'country/emissions',
+                    'country': country,
+                    'sector': sector or 'all',
+                    'year': year,
+                    'data': data[:10] if isinstance(data, list) else data  # Limit response size
+                }
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.warning(f"Climate TRACE endpoint not found: {e}")
+                return self._get_climate_trace_fallback_data(country, sector, year)
+            else:
+                logger.error(f"HTTP error fetching Climate TRACE data: {e}")
+                return {'error': f'HTTP {e.response.status_code}: {str(e)}'}
+        except Exception as e:
+            logger.error(f"Error fetching Climate TRACE data: {e}")
+            return self._get_climate_trace_fallback_data(country, sector, year)
+    
+    def get_climate_trace_sectors(self) -> Dict[str, Any]:
+        """Get available sectors from Climate TRACE"""
+        try:
+            url = f"{settings.CLIMATETRACE_API_BASE}/definitions/sectors"
+            response = self.session.get(url)
+            response.raise_for_status()
+            
+            sectors_data = response.json()
+            
+            # Convert list to dict if needed
+            if isinstance(sectors_data, list):
+                sectors_dict = {sector: idx for idx, sector in enumerate(sectors_data)}
+            else:
+                sectors_dict = sectors_data
+            
             return {
-                'country': country or 'global',
-                'sector': sector or 'all',
-                'total_emissions_mt': 50000000,  # Mock data
-                'year': 2023,
-                'note': 'This is sample data. Real Climate TRACE integration requires proper API access.'
+                'sectors': sectors_dict,
+                'source': 'climate_trace_api'
             }
             
         except Exception as e:
-            logger.error(f"Error fetching Climate TRACE data: {e}")
+            logger.error(f"Error fetching Climate TRACE sectors: {e}")
+            return {
+                'sectors': {
+                    'power': 1,
+                    'transportation': 2,
+                    'buildings': 3,
+                    'fossil-fuel-operations': 4,
+                    'manufacturing': 5,
+                    'mineral-extraction': 6,
+                    'agriculture': 7,
+                    'waste': 8,
+                    'fluorinated-gases': 9,
+                    'forestry-and-land-use': 10
+                },
+                'source': 'fallback_data'
+            }
+    
+    def get_climate_trace_countries(self) -> Dict[str, Any]:
+        """Get available countries from Climate TRACE"""
+        try:
+            url = f"{settings.CLIMATETRACE_API_BASE}/definitions/countries"
+            response = self.session.get(url)
+            response.raise_for_status()
+            
+            return {
+                'countries': response.json(),
+                'source': 'climate_trace_api'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching Climate TRACE countries: {e}")
+            return {
+                'countries': ['USA', 'CHN', 'IND', 'RUS', 'JPN', 'DEU', 'IRN', 'SAU', 'KOR', 'CAN'],
+                'source': 'fallback_data'
+            }
+    
+    def search_climate_trace_assets(self, country: str = None, sector: str = None, limit: int = 100) -> Dict[str, Any]:
+        """Search for emissions sources (assets) in Climate TRACE"""
+        try:
+            url = f"{settings.CLIMATETRACE_API_BASE}/assets"
+            params = {
+                'limit': min(limit, 1000),  # API max is 1000
+                'year': 2022
+            }
+            
+            if country:
+                params['countries'] = country.upper()
+            if sector:
+                params['sectors'] = sector
+            
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            return {
+                'assets': data,
+                'count': len(data) if isinstance(data, list) else 1,
+                'filters': {
+                    'country': country,
+                    'sector': sector,
+                    'limit': limit
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error searching Climate TRACE assets: {e}")
             return {'error': str(e)}
+    
+    def _get_climate_trace_fallback_data(self, country: str = None, sector: str = None, year: int = 2022) -> Dict[str, Any]:
+        """Provide fallback data when Climate TRACE API is unavailable"""
+        # Sample emissions data based on real-world estimates
+        fallback_emissions = {
+            'USA': {'power': 1500, 'transportation': 1800, 'buildings': 500, 'manufacturing': 400},
+            'CHN': {'power': 4000, 'transportation': 800, 'buildings': 300, 'manufacturing': 1200},
+            'IND': {'power': 900, 'transportation': 300, 'buildings': 150, 'manufacturing': 600},
+            'DEU': {'power': 250, 'transportation': 150, 'buildings': 100, 'manufacturing': 200},
+            'JPN': {'power': 350, 'transportation': 200, 'buildings': 80, 'manufacturing': 300}
+        }
+        
+        country_code = country.upper() if country else 'USA'
+        country_data = fallback_emissions.get(country_code, fallback_emissions['USA'])
+        
+        if sector and sector in country_data:
+            emissions = country_data[sector]
+        else:
+            emissions = sum(country_data.values())
+        
+        return {
+            'country': country_code,
+            'sector': sector or 'all',
+            'total_emissions_mt': emissions,
+            'year': year,
+            'source': 'fallback_data',
+            'note': 'Using estimated data. Climate TRACE API may be temporarily unavailable.'
+        }
     
     def get_world_bank_climate_data(self, country_code: str, indicator: str) -> Dict[str, Any]:
         """Get climate indicators from World Bank API"""

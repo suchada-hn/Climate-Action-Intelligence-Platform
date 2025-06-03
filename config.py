@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     
     # Model Settings
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-    WATSONX_MODEL_ID: str = "meta-llama/llama-2-70b-chat"
+    WATSONX_MODEL_ID: str = "ibm/granite-13b-instruct-v2"  # IBM Granite model for hackathon
     
     class Config:
         env_file = ".env"

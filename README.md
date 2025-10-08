@@ -1,4 +1,5 @@
 # 🌍 Climate Action Intelligence Platform
+<img width="2868" height="1498" alt="image" src="https://github.com/user-attachments/assets/3eefe5a2-ae4f-489c-a9af-38f51e7484ba" />
 
 **ClimateIQ - Your AI Climate Action Partner**
 
